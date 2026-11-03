@@ -1,0 +1,29 @@
+# R session and workspace files
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Local source data
+/data/*.xlsx
+/data/*.xls
+/data/*.csv
+!/data/README.md
+
+# Generated analysis outputs
+/results/*
+!/results/.gitkeep
+/presentation_materials/*
+!/presentation_materials/.gitkeep
+/report_figures/*
+!/report_figures/.gitkeep
+
+# Knitted report outputs
+report.html
+report_files/
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store
+Thumbs.db

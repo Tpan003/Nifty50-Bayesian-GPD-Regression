@@ -1,0 +1,126 @@
+---
+title: "Forecasting Extreme Nifty 50 Loss Severity"
+author: "Group 2"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    df_print: paged
+params:
+  output_dir: "."
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  out.width = "100%"
+)
+
+output_dir <- params$output_dir
+results_dir <- file.path(output_dir, "results")
+presentation_dir <- file.path(output_dir, "presentation_materials")
+report_figure_dir <- file.path(output_dir, "report_figures")
+
+required_files <- c(
+  file.path(results_dir, "analysis_objects.rds"),
+  file.path(results_dir, "rolling_metrics.csv"),
+  file.path(results_dir, "reduced_model_comparison_metrics.csv")
+)
+if (!all(file.exists(required_files))) {
+  stop("Run run_analysis.R before knitting this report.")
+}
+
+analysis_objects <- readRDS(file.path(results_dir, "analysis_objects.rds"))
+rolling_metrics <- read.csv(file.path(results_dir, "rolling_metrics.csv"))
+reduced_metrics <- read.csv(
+  file.path(results_dir, "reduced_model_comparison_metrics.csv")
+)
+validation <- read.csv(file.path(results_dir, "validation_checks.csv"))
+comparison_validation <- read.csv(
+  file.path(results_dir, "reduced_model_comparison_validation.csv")
+)
+```
+
+# Executive summary
+
+This report presents a peaks-over-threshold analysis of extreme Nifty 50 daily losses. The response is the loss in excess of a prespecified threshold. A Generalised Pareto Distribution (GPD) is fitted to the excesses, with lagged market variables used to model the conditional scale parameter.
+
+The model predicts **loss severity conditional on an exceedance**. It does not estimate the probability that a threshold exceedance will occur.
+
+# Data and model design
+
+The analysis uses the Nifty 50 return series and lagged information from Nifty volatility, S&P 500 volatility, gold volatility, India VIX, and USD/INR volatility. For every forecast date, each predictor is taken from the latest available source observation strictly before that date. This avoids using same-day or future information.
+
+The default threshold is `r analysis_objects$config$threshold` percentage points. The rolling training window contains `r analysis_objects$config$rolling_observations` prior Nifty trading dates, with at least `r analysis_objects$config$minimum_training_exceedances` complete training exceedances required before a model is fitted.
+
+The slope coefficients are regularised using Cauchy, lasso, ridge, and Zellner g-prior penalties. An intercept-only GPD model is used as the benchmark.
+
+# Rolling model performance
+
+```{r rolling-metrics}
+knitr::kable(rolling_metrics, digits = 4,
+             caption = "Rolling conditional severity scores")
+```
+
+```{r reduced-model-metrics}
+knitr::kable(reduced_metrics, digits = 4,
+             caption = "Reduced-model comparison on common forecast dates")
+```
+
+## Validation
+
+```{r validation-results}
+knitr::kable(validation, caption = "Core analysis validation checks")
+knitr::kable(comparison_validation,
+             caption = "Reduced-model comparison validation checks")
+```
+
+# Presentation figures
+
+```{r presentation-figures, results='asis'}
+figures <- c(
+  "graph_1_nifty_returns_threshold.png",
+  "graph_2_actual_vs_predicted_severity.png",
+  "graph_3_rolling_VIF_by_model.png",
+  "graph_4_predictor_correlation_heatmap.png",
+  "graph_5_selected_model_errors.png"
+)
+for (figure in figures) {
+  path <- file.path(presentation_dir, figure)
+  if (file.exists(path)) {
+    cat("\n### ", gsub("_", " ", tools::file_path_sans_ext(figure)), "\n\n", sep = "")
+    print(knitr::include_graphics(path))
+    cat("\n\n")
+  }
+}
+```
+
+# Additional report diagnostics
+
+```{r report-figures, results='asis'}
+all_figures <- list.files(
+  report_figure_dir,
+  pattern = "^fig[0-9][0-9]_.*\\.png$",
+  full.names = TRUE
+)
+all_figures <- all_figures[order(all_figures)]
+for (path in all_figures) {
+  figure_name <- basename(path)
+  cat("\n### ", gsub("_", " ", tools::file_path_sans_ext(figure_name)), "\n\n", sep = "")
+  knitr::include_graphics(path)
+  cat("\n\n")
+}
+```
+
+# Interpretation and limitations
+
+The results should be interpreted with care. Extreme-loss observations are relatively rare, so the number of exceedances available in each rolling training window is much smaller than the number of trading days. Regularisation helps control coefficient instability, but it does not eliminate uncertainty.
+
+The reduced predictor sets are compared on common rolling forecast dates. If the same dates are used to select a preferred model and report its performance, the selected model's results are exploratory. A final claim about generalisation should be based on a later, untouched evaluation period or a nested rolling validation design.
+
+The conditional log score evaluates the fitted excess-loss distribution given an exceedance. It is not a measure of the model's ability to forecast whether an exceedance occurs.
